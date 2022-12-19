@@ -1,8 +1,11 @@
+use core::fmt;
+use cursive::backends::curses::n::ncurses::OK;
 use cursive::traits::*;
 use cursive::views::{Button, Dialog, DummyView, EditView, LinearLayout, SelectView};
 use cursive::Cursive;
 use std::collections::BTreeMap;
-use std::fmt::Error;
+use std::fmt::{write, Error};
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{io::stderr, process::Command, result};
 
 #[derive(Debug)]
@@ -12,6 +15,26 @@ struct WgInterface {
     listen_port: u16,
     fwmark: bool,
     peers: Vec<WgPeer>,
+    show_priv: bool,
+}
+
+impl fmt::Display for WgInterface {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let private_key = if self.show_priv {
+            self.private_key.to_owned()
+        } else {
+            "(hidden)".to_string()
+        };
+        write!(f, "Private Key: {}\n", private_key)?;
+        write!(f, "Public Key: {}\n", self.public_key)?;
+        write!(f, "Listen Port: {}\n", self.listen_port)?;
+        write!(f, "fwmark: {}\n", self.fwmark)?;
+        write!(f, "----- Peers -----\n")?;
+        for peer in self.peers.iter() {
+            write!(f, "{}", peer)?;
+        }
+        write!(f, " ")
+    }
 }
 
 #[derive(Debug)]
@@ -20,10 +43,32 @@ struct WgPeer {
     preshared_key: Option<String>,
     endpoint: String,
     allowed_ips: String,
-    latest_handshake: u64,
+    latest_handshake: u128,
     transfer_rx: u64,
     transfer_tx: u64,
     persistent_keepalive: bool,
+}
+
+impl fmt::Display for WgPeer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Public Key: {}\n", self.public_key)?;
+        write!(
+            f,
+            "Preshared Key: {}\n",
+            self.preshared_key
+                .to_owned()
+                .unwrap_or("(none)".to_string())
+        )?;
+        write!(f, "Endpoinr: {}\n", self.endpoint)?;
+        write!(f, "Allowed Ips: {}\n", self.allowed_ips)?;
+        write!(f, "Latest handshake: {}\n", self.latest_handshake)?;
+        write!(
+            f,
+            "Transfer: {} B recieved, {} B sent\n",
+            self.transfer_rx, self.transfer_tx
+        )?;
+        write!(f, "Persistent Keepalive: {}\n", self.public_key)
+    }
 }
 
 fn main() {
@@ -91,6 +136,7 @@ fn refresh_interfaces() -> Result<BTreeMap<String, WgInterface>, Error> {
                             },
                         })
                         .collect::<Vec<WgPeer>>(),
+                    show_priv: false,
                 },
             );
         }
@@ -102,8 +148,8 @@ fn main_menu(s: &mut Cursive) {
     s.pop_layer();
     let buttons = LinearLayout::vertical()
         .child(Button::new("list", list_connections))
-        .child(Button::new("edit", delete_name))
-        .child(Button::new("Activate", delete_name))
+        .child(Button::new("edit", Cursive::quit))
+        .child(Button::new("Activate", Cursive::quit))
         .child(DummyView)
         .child(Button::new("Quit", Cursive::quit));
 
@@ -124,59 +170,13 @@ fn list_connections(s: &mut Cursive) {
 fn show_details(s: &mut Cursive, name: &str) {
     let interfaces = refresh_interfaces().unwrap();
     let interface = interfaces.get(name).unwrap();
-    let textbox = Dialog::text(format!("Name: {}\nPrivate Key: (hidden)\nPublic Key: {}\nListen Port: {}\nfwmark: {}\n---- Peers ----\n", name, interface.public_key, interface.listen_port, interface.fwmark))
+    let textbox = Dialog::text(format!("{}", interface))
         .title(format!("{} info", name))
         .button("ok", pop);
 
     s.add_layer(textbox)
 }
-fn pop(s:&mut Cursive){
+
+fn pop(s: &mut Cursive) {
     s.pop_layer();
-}
-
-fn add_name(s: &mut Cursive) {
-    fn ok(s: &mut Cursive, name: &str) {
-        s.call_on_name("select", |view: &mut SelectView<String>| {
-            view.add_item_str(name)
-        });
-        s.pop_layer();
-    }
-
-    s.add_layer(
-        Dialog::around(
-            EditView::new()
-                .on_submit(ok)
-                .with_name("name")
-                .fixed_width(10),
-        )
-        .title("Enter a new name")
-        .button("Ok", |s| {
-            let name = s
-                .call_on_name("name", |view: &mut EditView| view.get_content())
-                .unwrap();
-            ok(s, &name);
-        })
-        .button("Cancel", |s| {
-            s.pop_layer();
-        }),
-    );
-}
-
-fn delete_name(s: &mut Cursive) {
-    let mut select = s.find_name::<SelectView<String>>("select").unwrap();
-    match select.selected_id() {
-        None => s.add_layer(Dialog::info("No name to remove")),
-        Some(focus) => {
-            select.remove_item(focus);
-        }
-    }
-}
-
-fn on_submit(s: &mut Cursive, name: &str) {
-    s.pop_layer();
-    s.add_layer(
-        Dialog::text(format!("Name: {}\nAwesome: yes", name))
-            .title(format!("{}'s info", name))
-            .button("Quit", Cursive::quit),
-    );
 }
