@@ -1,13 +1,14 @@
 use core::fmt;
-use std::process::exit;
-use cursive::backends::curses::n::ncurses::OK;
-use cursive::traits::*;
-use cursive::views::{Button, Dialog, DummyView, EditView, LinearLayout, SelectView};
-use cursive::Cursive;
-use std::collections::BTreeMap;
-use std::fmt::{write, Error};
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::{io::stderr, process::Command, result};
+use cursive::{
+    views::{Button, Dialog, DummyView, LinearLayout, SelectView},
+    Cursive,
+};
+use std::{
+    collections::BTreeMap,
+    fmt::Error,
+    process::{exit, Command},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 #[derive(Debug)]
 struct WgInterface {
@@ -21,6 +22,8 @@ struct WgInterface {
 
 impl fmt::Display for WgInterface {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        //guarentees that private key is only shown if the user has
+        //decided to let it
         let private_key = if self.show_priv {
             self.private_key.to_owned()
         } else {
@@ -31,8 +34,12 @@ impl fmt::Display for WgInterface {
         write!(f, "Listen Port: {}\n", self.listen_port)?;
         write!(f, "fwmark: {}\n", self.fwmark)?;
         write!(f, "----- Peers -----\n")?;
+
+        //display all the peers in the vector
         for peer in self.peers.iter() {
             write!(f, "{}", peer)?;
+            //seperate multiple peers
+            write!(f, "\n")?;
         }
         write!(f, " ")
     }
@@ -52,11 +59,14 @@ struct WgPeer {
 
 impl fmt::Display for WgPeer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        //get current time in seconds
         let time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
         let time_since = time - self.latest_handshake;
+
+        //returns a formatted string given the time.
         let time_since = time_to_english(time_since)?;
 
         write!(f, "Public Key: {}\n", self.public_key)?;
@@ -79,27 +89,27 @@ impl fmt::Display for WgPeer {
     }
 }
 
-fn time_to_english(time: u64) -> Result<String, fmt::Error>{
+fn time_to_english(time: u64) -> Result<String, fmt::Error> {
     let mut output = "".to_string();
-    let mut time = time; 
+    let mut time = time;
     let mut days = 0;
     let mut hours = 0;
     let mut minutes = 0;
-    while time >= 60{
+
+    //count the days hours and minutes. remainder will be seconds
+    while time >= 60 {
         if time >= 86400 {
-            time -= 86400;       
+            time -= 86400;
             days += 1;
-        }
-        else if time >= 3600 {
+        } else if time >= 3600 {
             time -= 3600;
             hours += 1;
-        }
-        else if time >= 60 {
+        } else if time >= 60 {
             time -= 60;
             minutes += 1;
         }
     }
-    
+
     if days > 0 {
         output += &days.to_string();
         output += if days == 1 { " day " } else { " days " };
@@ -110,7 +120,11 @@ fn time_to_english(time: u64) -> Result<String, fmt::Error>{
     }
     if minutes > 0 {
         output += &minutes.to_string();
-        output += if minutes == 1 { " minute " } else { " minutes " };
+        output += if minutes == 1 {
+            " minute "
+        } else {
+            " minutes "
+        };
     }
     if time > 0 {
         output += &time.to_string();
@@ -133,13 +147,17 @@ fn refresh_interfaces() -> Result<BTreeMap<String, WgInterface>, Error> {
         .arg("dump")
         .output()
         .expect("Command failure");
+    //guarentee that user has proper permissions and that another error hasnt occured
     if !&result.status.success() {
-        eprint!("wireguard encountered an error. Does your user have the right permissions?");
+        eprint!("{}", String::from_utf8_lossy(&result.stderr));
         exit(1);
     }
 
     let raw_output = String::from_utf8_lossy(&result.stdout);
     let mut lines: Vec<&str> = raw_output.split("\n").collect::<Vec<&str>>();
+    //wireguard places a tab at the end which means that the last item the vector
+    //is an empty string. We pop that last value to make sure we only have our
+    //data in the string
     lines.pop();
 
     for (i, line) in lines.iter().enumerate() {
@@ -158,6 +176,8 @@ fn refresh_interfaces() -> Result<BTreeMap<String, WgInterface>, Error> {
                         "on" => true,
                         _ => unreachable!(),
                     },
+                    //true fuckery. fill all the peers into their proper locations as long as the
+                    //peer shares a name with the interface
                     peers: lines
                         .iter()
                         .skip(i + 1)
@@ -210,8 +230,8 @@ fn main_menu(s: &mut Cursive) {
 fn list_connections(s: &mut Cursive) {
     s.pop_layer();
     let interfaces = refresh_interfaces().unwrap();
-    //let list: Vec<String> = interfaces.into_keys().collect();
     let view = SelectView::<String>::new()
+        //map all interface keys(names) into my SelectView
         .with_all(interfaces.into_keys().map(|i| (format!("{}", i), i)))
         .on_submit(show_details);
 
@@ -228,6 +248,7 @@ fn show_details(s: &mut Cursive, name: &str) {
     s.add_layer(textbox)
 }
 
+//i can probably remove this if i just look it up
 fn pop(s: &mut Cursive) {
     s.pop_layer();
 }
