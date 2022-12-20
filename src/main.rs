@@ -1,4 +1,5 @@
 use core::fmt;
+use std::process::exit;
 use cursive::backends::curses::n::ncurses::OK;
 use cursive::traits::*;
 use cursive::views::{Button, Dialog, DummyView, EditView, LinearLayout, SelectView};
@@ -126,13 +127,16 @@ fn main() {
 
 fn refresh_interfaces() -> Result<BTreeMap<String, WgInterface>, Error> {
     let mut interfaces: BTreeMap<String, WgInterface> = BTreeMap::new();
-    let result = Command::new("sudo")
-        .arg("wg")
+    let result = Command::new("wg")
         .arg("show")
         .arg("all")
         .arg("dump")
         .output()
         .expect("Command failure");
+    if !&result.status.success() {
+        eprint!("wireguard encountered an error. Does your user have the right permissions?");
+        exit(1);
+    }
 
     let raw_output = String::from_utf8_lossy(&result.stdout);
     let mut lines: Vec<&str> = raw_output.split("\n").collect::<Vec<&str>>();
