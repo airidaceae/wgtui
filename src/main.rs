@@ -43,7 +43,7 @@ struct WgPeer {
     preshared_key: Option<String>,
     endpoint: String,
     allowed_ips: String,
-    latest_handshake: u128,
+    latest_handshake: u64,
     transfer_rx: u64,
     transfer_tx: u64,
     persistent_keepalive: bool,
@@ -51,6 +51,13 @@ struct WgPeer {
 
 impl fmt::Display for WgPeer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let time_since = time - self.latest_handshake;
+        let time_since = time_to_english(time_since)?;
+
         write!(f, "Public Key: {}\n", self.public_key)?;
         write!(
             f,
@@ -59,16 +66,56 @@ impl fmt::Display for WgPeer {
                 .to_owned()
                 .unwrap_or("(none)".to_string())
         )?;
-        write!(f, "Endpoinr: {}\n", self.endpoint)?;
+        write!(f, "Endpoint: {}\n", self.endpoint)?;
         write!(f, "Allowed Ips: {}\n", self.allowed_ips)?;
-        write!(f, "Latest handshake: {}\n", self.latest_handshake)?;
+        write!(f, "Latest handshake: {}\n", time_since)?;
         write!(
             f,
             "Transfer: {} B recieved, {} B sent\n",
             self.transfer_rx, self.transfer_tx
         )?;
-        write!(f, "Persistent Keepalive: {}\n", self.public_key)
+        write!(f, "Persistent Keepalive: {}\n", self.persistent_keepalive)
     }
+}
+
+fn time_to_english(time: u64) -> Result<String, fmt::Error>{
+    let mut output = "".to_string();
+    let mut time = time; 
+    let mut days = 0;
+    let mut hours = 0;
+    let mut minutes = 0;
+    while time >= 60{
+        if time >= 86400 {
+            time -= 86400;       
+            days += 1;
+        }
+        else if time >= 3600 {
+            time -= 3600;
+            hours += 1;
+        }
+        else if time >= 60 {
+            time -= 60;
+            minutes += 1;
+        }
+    }
+    
+    if days > 0 {
+        output += &days.to_string();
+        output += if days == 1 { " day " } else { " days " };
+    }
+    if hours > 0 {
+        output += &hours.to_string();
+        output += if hours == 1 { " hour " } else { " hours " };
+    }
+    if minutes > 0 {
+        output += &minutes.to_string();
+        output += if minutes == 1 { " minute " } else { " minutes " };
+    }
+    if time > 0 {
+        output += &time.to_string();
+        output += if time == 1 { " second" } else { " seconds" };
+    }
+    Ok(output)
 }
 
 fn main() {
