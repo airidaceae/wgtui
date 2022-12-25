@@ -1,3 +1,4 @@
+#![feature(once_cell)]
 use core::fmt;
 
 use cursive::{
@@ -11,6 +12,7 @@ use std::{
     fmt::{Error, format, Debug},
     process::{exit, Command},
     time::{SystemTime, UNIX_EPOCH}, borrow::Borrow,
+    sync::LazyLock,
 };
 
 #[derive(Debug)]
@@ -91,6 +93,10 @@ impl fmt::Display for WgPeer {
         write!(f, "Persistent Keepalive: {}\n", self.persistent_keepalive)
     }
 }
+
+static INTERFACES: LazyLock<BTreeMap<String, WgInterface>> = LazyLock::new(|| {
+    refresh_interfaces().unwrap()
+});
 
 fn time_to_english(mut time: u64) -> Result<String, fmt::Error> {
     let mut output = "".to_string();
@@ -231,9 +237,9 @@ fn main_menu(s: &mut Cursive) {
 fn list_connections(s: &mut Cursive) {
     s.pop_layer();
     let details = TextView::new("").with_name("details");
-    let interfaces = refresh_interfaces().unwrap();
-    let mut interface_list = SelectView::<String>::new()
+    let interface_list = SelectView::<String>::new()
         //map all interface keys(names) into my SelectView
+        .with_all_str(INTERFACES.keys())
         .on_select(|s, item| {
             let content = item;
             s.call_on_name("details", |v: &mut TextView|{
@@ -241,9 +247,6 @@ fn list_connections(s: &mut Cursive) {
             }).unwrap();
         })
         .on_submit(show_details);
-    for key in interfaces.into_keys() {
-        interface_list.add_item(key.to_owned(), key);
-    }
     
     s.add_layer(Dialog::around(LinearLayout::horizontal()
         .child(interface_list)
@@ -254,8 +257,7 @@ fn list_connections(s: &mut Cursive) {
 }
 
 fn show_details(s: &mut Cursive, name: &str) {
-    let interfaces = refresh_interfaces().unwrap();
-    let interface = interfaces.get(name).unwrap();
+    let interface = INTERFACES.get(name).unwrap();
     let textbox = Dialog::text(format!("{}", interface))
         .title(format!("{} info", name))
         .button("ok", pop);
