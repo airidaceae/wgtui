@@ -2,18 +2,101 @@
 use core::fmt;
 
 use cursive::{
-    views::{Button, Dialog, DummyView, LinearLayout, SelectView, TextView},
     traits::Nameable,
+    views::{Button, Dialog, DummyView, LinearLayout, SelectView, TextView},
     Cursive,
 };
 
 use std::{
+    borrow::Borrow,
     collections::BTreeMap,
-    fmt::{Error, format, Debug},
+    fmt::{format, Debug, Error},
     process::{exit, Command},
-    time::{SystemTime, UNIX_EPOCH}, borrow::Borrow,
     sync::LazyLock,
+    time::{SystemTime, UNIX_EPOCH},
 };
+
+struct InterfacesMap {
+    //TODO make sure that this can be mutated in the future
+    interfaces: BTreeMap<String, WgInterface>,
+}
+
+impl InterfacesMap {
+    fn refresh(&mut self) {
+        let mut interfaces: BTreeMap<String, WgInterface> = BTreeMap::new();
+        let result = Command::new("wg")
+            .arg("show")
+            .arg("all")
+            .arg("dump")
+            .output()
+            .expect("Command failure");
+        //guarentee that user has proper permissions and that another error hasnt occured
+        if !&result.status.success() {
+            eprint!("{}", String::from_utf8_lossy(&result.stderr));
+            exit(1);
+        }
+
+        let raw_output = String::from_utf8_lossy(&result.stdout);
+        let mut lines: Vec<&str> = raw_output.split("\n").collect::<Vec<&str>>();
+        //wireguard places a tab at the end which means that the last item the vector
+        //is an empty string. We pop that last value to make sure we only have our
+        //data in the string
+        lines.pop();
+
+        for (i, line) in lines.iter().enumerate() {
+            let line: Vec<&str> = line.split("\t").collect();
+            if line.len() == 5 {
+                interfaces.insert(
+                    line[0].to_string(),
+                    WgInterface {
+                        private_key: line[1].to_string(),
+                        public_key: line[2].to_string(),
+                        listen_port: line[3]
+                            .parse()
+                            .expect("Value {line[3]} could not be parsed to listen_port(u16)"),
+                        fwmark: match line[4] {
+                            "off" => None,
+                            _ => Some(line[4].to_string()),
+                        },
+                        //true fuckery. fill all the peers into their proper locations as long as the
+                        //peer shares a name with the interface
+                        peers: lines
+                            .iter()
+                            .skip(i + 1)
+                            .map(|x| x.split("\t").collect::<Vec<&str>>())
+                            .take_while(|x| line[0] == x[0])
+                            .map(|x| WgPeer {
+                                public_key: x[1].to_string(),
+                                preshared_key: match x[2] {
+                                    "(none)" => None,
+                                    _ => Some(x[2].to_string()),
+                                },
+                                endpoint: x[3].to_string(),
+                                allowed_ips: x[4].to_string(),
+                                latest_handshake: x[5].parse().expect(
+                                    "Value {x[5]} could not be parsed to latest_handshake(u64)",
+                                ),
+                                transfer_rx: x[6]
+                                    .parse()
+                                    .expect("Value {x[6]} could not be parsed to transfer_rx(u64)"),
+                                transfer_tx: x[7]
+                                    .parse()
+                                    .expect("Value {x[7]} could not be parsed to transfer_tx(u64)"),
+                                persistent_keepalive: match x[8] {
+                                    "off" => false,
+                                    "on" => true,
+                                    _ => unreachable!(),
+                                },
+                            })
+                            .collect::<Vec<WgPeer>>(),
+                        show_priv: false,
+                    },
+                );
+            }
+        }
+        self.interfaces = interfaces;
+    }
+}
 
 #[derive(Debug)]
 struct WgInterface {
@@ -37,7 +120,11 @@ impl fmt::Display for WgInterface {
         write!(f, "Private Key: {}\n", private_key)?;
         write!(f, "Public Key: {}\n", self.public_key)?;
         write!(f, "Listen Port: {}\n", self.listen_port)?;
-        write!(f, "fwmark: {}\n", self.fwmark.to_owned().unwrap_or("off".to_string()))?;
+        write!(
+            f,
+            "fwmark: {}\n",
+            self.fwmark.to_owned().unwrap_or("off".to_string())
+        )?;
         write!(f, "----- Peers -----\n")?;
 
         //display all the peers in the vector
@@ -94,8 +181,12 @@ impl fmt::Display for WgPeer {
     }
 }
 
-static INTERFACES: LazyLock<BTreeMap<String, WgInterface>> = LazyLock::new(|| {
-    refresh_interfaces().unwrap()
+static INTERFACES: LazyLock<InterfacesMap> = LazyLock::new(|| {
+    let mut interfaces = InterfacesMap {
+        interfaces: BTreeMap::new(),
+    };
+    interfaces.refresh();
+    interfaces
 });
 
 fn time_to_english(mut time: u64) -> Result<String, fmt::Error> {
@@ -147,81 +238,6 @@ fn main() {
     siv.run();
 }
 
-fn refresh_interfaces() -> Result<BTreeMap<String, WgInterface>, Error> {
-    let mut interfaces: BTreeMap<String, WgInterface> = BTreeMap::new();
-    let result = Command::new("wg")
-        .arg("show")
-        .arg("all")
-        .arg("dump")
-        .output()
-        .expect("Command failure");
-    //guarentee that user has proper permissions and that another error hasnt occured
-    if !&result.status.success() {
-        eprint!("{}", String::from_utf8_lossy(&result.stderr));
-        exit(1);
-    }
-
-    let raw_output = String::from_utf8_lossy(&result.stdout);
-    let mut lines: Vec<&str> = raw_output.split("\n").collect::<Vec<&str>>();
-    //wireguard places a tab at the end which means that the last item the vector
-    //is an empty string. We pop that last value to make sure we only have our
-    //data in the string
-    lines.pop();
-
-    for (i, line) in lines.iter().enumerate() {
-        let line: Vec<&str> = line.split("\t").collect();
-        if line.len() == 5 {
-            interfaces.insert(
-                line[0].to_string(),
-                WgInterface {
-                    private_key: line[1].to_string(),
-                    public_key: line[2].to_string(),
-                    listen_port: line[3]
-                        .parse()
-                        .expect("Value {line[3]} could not be parsed to listen_port(u16)"),
-                    fwmark: match line[4] {
-                        "off" => None,
-                        _ => Some(line[4].to_string()),
-                    },
-                    //true fuckery. fill all the peers into their proper locations as long as the
-                    //peer shares a name with the interface
-                    peers: lines
-                        .iter()
-                        .skip(i + 1)
-                        .map(|x| x.split("\t").collect::<Vec<&str>>())
-                        .take_while(|x| line[0] == x[0])
-                        .map(|x| WgPeer {
-                            public_key: x[1].to_string(),
-                            preshared_key: match x[2] {
-                                "(none)" => None,
-                                _ => Some(x[2].to_string()),
-                            },
-                            endpoint: x[3].to_string(),
-                            allowed_ips: x[4].to_string(),
-                            latest_handshake: x[5].parse().expect(
-                                "Value {x[5]} could not be parsed to latest_handshake(u64)",
-                            ),
-                            transfer_rx: x[6]
-                                .parse()
-                                .expect("Value {x[6]} could not be parsed to transfer_rx(u64)"),
-                            transfer_tx: x[7]
-                                .parse()
-                                .expect("Value {x[7]} could not be parsed to transfer_tx(u64)"),
-                            persistent_keepalive: match x[8] {
-                                "off" => false,
-                                "on" => true,
-                                _ => unreachable!(),
-                            },
-                        })
-                        .collect::<Vec<WgPeer>>(),
-                    show_priv: false,
-                },
-            );
-        }
-    }
-    Ok(interfaces)
-}
-
 fn main_menu(s: &mut Cursive) {
     s.pop_layer();
     let buttons = LinearLayout::vertical()
@@ -239,25 +255,29 @@ fn list_connections(s: &mut Cursive) {
     let details = TextView::new("").with_name("details");
     let interface_list = SelectView::<String>::new()
         //map all interface keys(names) into my SelectView
-        .with_all_str(INTERFACES.keys())
+        .with_all_str(INTERFACES.interfaces.keys())
         .on_select(|s, item| {
             let content = item;
-            s.call_on_name("details", |v: &mut TextView|{
+            s.call_on_name("details", |v: &mut TextView| {
                 v.set_content(content);
-            }).unwrap();
+            })
+            .unwrap();
         })
         .on_submit(show_details);
-    
-    s.add_layer(Dialog::around(LinearLayout::horizontal()
-        .child(interface_list)
-        .child(DummyView)
-        .child(details))
-    .title("Interfaces"));
 
+    s.add_layer(
+        Dialog::around(
+            LinearLayout::horizontal()
+                .child(interface_list)
+                .child(DummyView)
+                .child(details),
+        )
+        .title("Interfaces"),
+    );
 }
 
 fn show_details(s: &mut Cursive, name: &str) {
-    let interface = INTERFACES.get(name).unwrap();
+    let interface = INTERFACES.interfaces.get(name).unwrap();
     let textbox = Dialog::text(format!("{}", interface))
         .title(format!("{} info", name))
         .button("ok", pop);
