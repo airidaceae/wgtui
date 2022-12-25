@@ -1,13 +1,16 @@
 use core::fmt;
+
 use cursive::{
-    views::{Button, Dialog, DummyView, LinearLayout, SelectView},
+    views::{Button, Dialog, DummyView, LinearLayout, SelectView, TextView},
+    traits::Nameable,
     Cursive,
 };
+
 use std::{
     collections::BTreeMap,
-    fmt::Error,
+    fmt::{Error, format, Debug},
     process::{exit, Command},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH}, borrow::Borrow,
 };
 
 #[derive(Debug)]
@@ -15,7 +18,7 @@ struct WgInterface {
     private_key: String,
     public_key: String,
     listen_port: u16,
-    fwmark: bool,
+    fwmark: Option<String>,
     peers: Vec<WgPeer>,
     show_priv: bool,
 }
@@ -32,7 +35,7 @@ impl fmt::Display for WgInterface {
         write!(f, "Private Key: {}\n", private_key)?;
         write!(f, "Public Key: {}\n", self.public_key)?;
         write!(f, "Listen Port: {}\n", self.listen_port)?;
-        write!(f, "fwmark: {}\n", self.fwmark)?;
+        write!(f, "fwmark: {}\n", self.fwmark.to_owned().unwrap_or("off".to_string()))?;
         write!(f, "----- Peers -----\n")?;
 
         //display all the peers in the vector
@@ -89,14 +92,13 @@ impl fmt::Display for WgPeer {
     }
 }
 
-fn time_to_english(time: u64) -> Result<String, fmt::Error> {
+fn time_to_english(mut time: u64) -> Result<String, fmt::Error> {
     let mut output = "".to_string();
-    let mut time = time;
     let mut days = 0;
     let mut hours = 0;
     let mut minutes = 0;
 
-    //count the days hours and minutes. remainder will be seconds
+    //count the days hours and minutes. What remains will be seconds
     while time >= 60 {
         if time >= 86400 {
             time -= 86400;
@@ -172,9 +174,8 @@ fn refresh_interfaces() -> Result<BTreeMap<String, WgInterface>, Error> {
                         .parse()
                         .expect("Value {line[3]} could not be parsed to listen_port(u16)"),
                     fwmark: match line[4] {
-                        "off" => false,
-                        "on" => true,
-                        _ => unreachable!(),
+                        "off" => None,
+                        _ => Some(line[4].to_string()),
                     },
                     //true fuckery. fill all the peers into their proper locations as long as the
                     //peer shares a name with the interface
@@ -229,13 +230,27 @@ fn main_menu(s: &mut Cursive) {
 
 fn list_connections(s: &mut Cursive) {
     s.pop_layer();
+    let details = TextView::new("").with_name("details");
     let interfaces = refresh_interfaces().unwrap();
-    let view = SelectView::<String>::new()
+    let mut interface_list = SelectView::<String>::new()
         //map all interface keys(names) into my SelectView
-        .with_all(interfaces.into_keys().map(|i| (format!("{}", i), i)))
+        .on_select(|s, item| {
+            let content = item;
+            s.call_on_name("details", |v: &mut TextView|{
+                v.set_content(content);
+            }).unwrap();
+        })
         .on_submit(show_details);
+    for key in interfaces.into_keys() {
+        interface_list.add_item(key.to_owned(), key);
+    }
+    
+    s.add_layer(Dialog::around(LinearLayout::horizontal()
+        .child(interface_list)
+        .child(DummyView)
+        .child(details))
+    .title("Interfaces"));
 
-    s.add_layer(view);
 }
 
 fn show_details(s: &mut Cursive, name: &str) {
