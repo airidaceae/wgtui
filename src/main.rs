@@ -257,7 +257,7 @@ fn list_connections(s: &mut Cursive) {
         //map all interface keys(names) into my SelectView
         .with_all_str(INTERFACES.interfaces.keys())
         .on_select(|s, item| {
-            let content = item;
+            let content = format!("{}", INTERFACES.interfaces.get(item).unwrap());
             s.call_on_name("details", |v: &mut TextView| {
                 v.set_content(content);
             })
