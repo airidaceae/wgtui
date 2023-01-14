@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 cursive = "0.20.0"
+parking_lot = "0.12.1"

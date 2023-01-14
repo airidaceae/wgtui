@@ -4,17 +4,18 @@ use core::fmt;
 use cursive::{
     traits::Nameable,
     views::{Button, Dialog, DummyView, LinearLayout, SelectView, TextView},
-    Cursive,
+    Cursive, backends::curses::n::ncurses::ll::refresh,
 };
 
 use std::{
-    borrow::Borrow,
     collections::BTreeMap,
     fmt::{format, Debug, Error},
     process::{exit, Command},
-    sync::LazyLock,
+    sync::{LazyLock, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+use parking_lot::RwLock;
 
 struct InterfacesMap {
     //TODO make sure that this can be mutated in the future
@@ -22,6 +23,16 @@ struct InterfacesMap {
 }
 
 impl InterfacesMap {
+    pub fn new() -> InterfacesMap {
+        let mut interfacesmap: InterfacesMap = InterfacesMap { 
+            interfaces: BTreeMap::new(),
+        };
+        
+        
+        interfacesmap.refresh();
+        interfacesmap
+    }
+
     fn refresh(&mut self) {
         let mut interfaces: BTreeMap<String, WgInterface> = BTreeMap::new();
         let result = Command::new("wg")
@@ -181,12 +192,16 @@ impl fmt::Display for WgPeer {
     }
 }
 
-static INTERFACES: LazyLock<InterfacesMap> = LazyLock::new(|| {
+/*static INTERFACES: LazyLock<InterfacesMap> = LazyLock::new(|| {
     let mut interfaces = InterfacesMap {
         interfaces: BTreeMap::new(),
     };
     interfaces.refresh();
     interfaces
+});*/
+
+static INTERFACES: RwLock<InterfacesMap> = RwLock::new(InterfacesMap{
+    interfaces: BTreeMap::new(),
 });
 
 fn time_to_english(mut time: u64) -> Result<String, fmt::Error> {
@@ -235,6 +250,7 @@ fn time_to_english(mut time: u64) -> Result<String, fmt::Error> {
 fn main() {
     let mut siv = cursive::default();
     main_menu(&mut siv);
+    INTERFACES.write().refresh();
     siv.run();
 }
 
@@ -255,9 +271,9 @@ fn list_connections(s: &mut Cursive) {
     let details = TextView::new("").with_name("details");
     let interface_list = SelectView::<String>::new()
         //map all interface keys(names) into my SelectView
-        .with_all_str(INTERFACES.interfaces.keys())
+        .with_all_str(INTERFACES.read().interfaces.keys())
         .on_select(|s, item| {
-            let content = format!("{}", INTERFACES.interfaces.get(item).unwrap());
+            let content = format!("{}", INTERFACES.read().interfaces.get(item).unwrap());
             s.call_on_name("details", |v: &mut TextView| {
                 v.set_content(content);
             })
@@ -277,15 +293,16 @@ fn list_connections(s: &mut Cursive) {
 }
 
 fn show_details(s: &mut Cursive, name: &str) {
-    let interface = INTERFACES.interfaces.get(name).unwrap();
+    let piss = INTERFACES.read();
+    let interface = piss.interfaces.get(name).unwrap();
     let textbox = Dialog::text(format!("{}", interface))
         .title(format!("{} info", name))
         .button("ok", pop);
 
-    s.add_layer(textbox)
+    s.add_layer(textbox);
 }
 
-//i can probably remove this if i just look it up
+//TODO get rid of this
 fn pop(s: &mut Cursive) {
     s.pop_layer();
 }
