@@ -4,11 +4,11 @@ a terminal ui for wireguard written using cursive
 pronounced /wəgətui/
 
 ## TODO:
-- [X] display interfaces
-- [ ] logging
+- [X] display interfaces (including ones that are down)
 - [ ] bring interface down
 - [ ] bring interface up
 - [ ] improve navigation
+- [ ] logging
 - [ ] make it look not like shit
 - [ ] improve privilages 
 - [ ] edit configuration
