@@ -12,7 +12,7 @@ use std::{
     fmt::{format, Debug, Error},
     process::{exit, Command},
     sync::{LazyLock, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH}, fs, ptr::write,
 };
 
 use parking_lot::RwLock;
@@ -20,15 +20,15 @@ use parking_lot::RwLock;
 struct InterfacesMap {
     //TODO make sure that this can be mutated in the future
     interfaces: BTreeMap<String, WgInterface>,
+    interfaces_down: Vec<String>,
 }
 
 impl InterfacesMap {
     pub fn new() -> InterfacesMap {
         let mut interfacesmap: InterfacesMap = InterfacesMap { 
-            interfaces: BTreeMap::new(),
+                interfaces: BTreeMap::new(),
+                interfaces_down: Vec::new()
         };
-        
-        
         interfacesmap.refresh();
         interfacesmap
     }
@@ -60,6 +60,7 @@ impl InterfacesMap {
                 interfaces.insert(
                     line[0].to_string(),
                     WgInterface {
+                        enabled: true,
                         private_key: line[1].to_string(),
                         public_key: line[2].to_string(),
                         listen_port: line[3]
@@ -105,12 +106,24 @@ impl InterfacesMap {
                 );
             }
         }
+        let interfaces_down = fs::read_dir("/etc/wireguard/")
+            .unwrap()
+            .map(|x| x.unwrap().file_name().into_string().unwrap())
+            .filter(|x| x.contains(".conf"))
+            .map(|x| x.replace(".conf", ""))
+            .filter(|x| !interfaces.contains_key(x))
+            .collect::<Vec<String>>();
+        for item in interfaces_down {
+            interfaces.insert(item, Default::default());
+        }
+        
         self.interfaces = interfaces;
     }
 }
 
 #[derive(Debug)]
 struct WgInterface {
+    enabled: bool,
     private_key: String,
     public_key: String,
     listen_port: u16,
@@ -119,32 +132,51 @@ struct WgInterface {
     show_priv: bool,
 }
 
+impl Default for WgInterface {
+    fn default() -> Self {
+        WgInterface {
+            enabled: false,
+            private_key: "".to_owned(),
+            public_key: "".to_owned(),
+            listen_port: 0,
+            fwmark: None,
+            peers: Vec::new(),
+            show_priv: false,
+        }
+    }
+}
+
 impl fmt::Display for WgInterface {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         //guarentees that private key is only shown if the user has
         //decided to let it
-        let private_key = if self.show_priv {
-            self.private_key.to_owned()
-        } else {
-            "(hidden)".to_string()
-        };
-        write!(f, "Private Key: {}\n", private_key)?;
-        write!(f, "Public Key: {}\n", self.public_key)?;
-        write!(f, "Listen Port: {}\n", self.listen_port)?;
-        write!(
-            f,
-            "fwmark: {}\n",
-            self.fwmark.to_owned().unwrap_or("off".to_string())
-        )?;
-        write!(f, "----- Peers -----\n")?;
-
-        //display all the peers in the vector
-        for peer in self.peers.iter() {
-            write!(f, "{}", peer)?;
-            //seperate multiple peers
-            write!(f, "\n")?;
+        if !self.enabled {
+            write!(f, "Interface is down.")
         }
-        write!(f, " ")
+        else{
+            let private_key = if self.show_priv {
+                self.private_key.to_owned()
+            } else {
+                "(hidden)".to_string()
+            };
+            write!(f, "Private Key: {}\n", private_key)?;
+            write!(f, "Public Key: {}\n", self.public_key)?;
+            write!(f, "Listen Port: {}\n", self.listen_port)?;
+            write!(
+                f,
+                "fwmark: {}\n",
+                self.fwmark.to_owned().unwrap_or("off".to_string())
+            )?;
+            write!(f, "----- Peers -----\n")?;
+
+            //display all the peers in the vector
+            for peer in self.peers.iter() {
+                write!(f, "{}", peer)?;
+                //seperate multiple peers
+                write!(f, "\n")?;
+            }
+            write!(f, " ")
+        }
     }
 }
 
@@ -192,16 +224,9 @@ impl fmt::Display for WgPeer {
     }
 }
 
-/*static INTERFACES: LazyLock<InterfacesMap> = LazyLock::new(|| {
-    let mut interfaces = InterfacesMap {
-        interfaces: BTreeMap::new(),
-    };
-    interfaces.refresh();
-    interfaces
-});*/
-
 static INTERFACES: RwLock<InterfacesMap> = RwLock::new(InterfacesMap{
     interfaces: BTreeMap::new(),
+    interfaces_down: Vec::new(),
 });
 
 fn time_to_english(mut time: u64) -> Result<String, fmt::Error> {
