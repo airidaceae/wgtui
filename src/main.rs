@@ -1,18 +1,33 @@
-#![feature(once_cell)]
+/* wgtui - a terminal UI for wireguard
+ *   Copyright (C) 2023 Iris Pupo
+ *
+ *   This program is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU Affero General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU Affero General Public License for more details.
+ *
+ *   You should have received a copy of the GNU Affero General Public License
+ *   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 use core::fmt;
 
 use cursive::{
     traits::Nameable,
     views::{Button, Dialog, DummyView, LinearLayout, SelectView, TextView},
-    Cursive, backends::curses::n::ncurses::ll::refresh,
+    Cursive,
 };
 
 use std::{
     collections::BTreeMap,
-    fmt::{format, Debug, Error},
+    fmt::{Debug, Error},
     process::{exit, Command},
-    sync::{LazyLock, Mutex},
-    time::{SystemTime, UNIX_EPOCH}, fs, ptr::write,
+    time::{SystemTime, UNIX_EPOCH}, fs,
 };
 
 use parking_lot::RwLock;
@@ -20,14 +35,12 @@ use parking_lot::RwLock;
 struct InterfacesMap {
     //TODO make sure that this can be mutated in the future
     interfaces: BTreeMap<String, WgInterface>,
-    interfaces_down: Vec<String>,
 }
 
 impl InterfacesMap {
     pub fn new() -> InterfacesMap {
         let mut interfacesmap: InterfacesMap = InterfacesMap { 
                 interfaces: BTreeMap::new(),
-                interfaces_down: Vec::new()
         };
         interfacesmap.refresh();
         interfacesmap
@@ -226,7 +239,6 @@ impl fmt::Display for WgPeer {
 
 static INTERFACES: RwLock<InterfacesMap> = RwLock::new(InterfacesMap{
     interfaces: BTreeMap::new(),
-    interfaces_down: Vec::new(),
 });
 
 fn time_to_english(mut time: u64) -> Result<String, fmt::Error> {
