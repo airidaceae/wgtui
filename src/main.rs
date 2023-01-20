@@ -25,24 +25,25 @@ use cursive::{
 
 use std::{
     collections::BTreeMap,
-    fmt::{Debug, Error},
-    process::{exit, Command},
-    time::{SystemTime, UNIX_EPOCH}, fs,
+    fmt::{Debug, Error, format},
+    fs,
+    process::{exit, Command, Child},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use parking_lot::RwLock;
 
 struct InterfacesMap {
-    //TODO make sure that this can be mutated in the future
     interfaces: BTreeMap<String, WgInterface>,
+    current_interface: String,
 }
 
 impl InterfacesMap {
-    pub fn new() -> InterfacesMap {
-        let mut interfacesmap: InterfacesMap = InterfacesMap { 
-                interfaces: BTreeMap::new(),
+    pub const fn new() -> InterfacesMap {
+        let interfacesmap: InterfacesMap = InterfacesMap {
+            interfaces: BTreeMap::new(),
+            current_interface: String::new(),
         };
-        interfacesmap.refresh();
         interfacesmap
     }
 
@@ -129,7 +130,7 @@ impl InterfacesMap {
         for item in interfaces_down {
             interfaces.insert(item, Default::default());
         }
-        
+
         self.interfaces = interfaces;
     }
 }
@@ -165,8 +166,7 @@ impl fmt::Display for WgInterface {
         //decided to let it
         if !self.enabled {
             write!(f, "Interface is down.")
-        }
-        else{
+        } else {
             let private_key = if self.show_priv {
                 self.private_key.to_owned()
             } else {
@@ -237,10 +237,9 @@ impl fmt::Display for WgPeer {
     }
 }
 
-static INTERFACES: RwLock<InterfacesMap> = RwLock::new(InterfacesMap{
-    interfaces: BTreeMap::new(),
-});
+static INTERFACES: RwLock<InterfacesMap> = RwLock::new(InterfacesMap::new());
 
+//TODO: improve this
 fn time_to_english(mut time: u64) -> Result<String, fmt::Error> {
     let mut output = "".to_string();
     let mut days = 0;
@@ -305,6 +304,7 @@ fn main_menu(s: &mut Cursive) {
 
 fn list_connections(s: &mut Cursive) {
     s.pop_layer();
+    INTERFACES.write().refresh();
     let details = TextView::new("").with_name("details");
     let interface_list = SelectView::<String>::new()
         //map all interface keys(names) into my SelectView
@@ -316,27 +316,52 @@ fn list_connections(s: &mut Cursive) {
             })
             .unwrap();
         })
-        .on_submit(show_details);
+        .on_submit(interface_select);
+    let buttons = Button::new("back", main_menu);
 
     s.add_layer(
         Dialog::around(
-            LinearLayout::horizontal()
-                .child(interface_list)
+            LinearLayout::vertical()
+                .child(
+                    LinearLayout::horizontal()
+                        .child(interface_list)
+                        .child(DummyView)
+                        .child(details),
+                )
                 .child(DummyView)
-                .child(details),
-        )
-        .title("Interfaces"),
-    );
+                .child(buttons),
+            )
+            .title("Interfaces"),
+        );
+    
 }
 
-fn show_details(s: &mut Cursive, name: &str) {
-    let piss = INTERFACES.read();
-    let interface = piss.interfaces.get(name).unwrap();
+fn interface_select(s: &mut Cursive, name: &str) {
+    INTERFACES.write().current_interface = name.to_string();
+    let buffer = INTERFACES.read();
+    let interface = buffer.interfaces.get(name).unwrap();
     let textbox = Dialog::text(format!("{}", interface))
-        .title(format!("{} info", name))
-        .button("ok", pop);
+        .title(format!("{}", name))
+        .button("ok", pop)
+        .button( if interface.enabled {"disable"}else{"enable"}, |s| change_state(s));
 
     s.add_layer(textbox);
+}
+
+fn change_state(s: &mut Cursive) {
+    let name = &INTERFACES.read().current_interface;
+    let enabled = INTERFACES.read().interfaces.get(name).unwrap().enabled;
+    let result = Command::new("wg-quick")
+        .arg(if enabled {"down"} else {"up"})
+        .arg(name.as_str())
+        .output()
+        .expect("Command failure");
+
+    let popup = Dialog::text(String::from_utf8_lossy(&result.stderr))
+        .button("OK", pop)
+        .title(format!("Command output for {}", name));
+    s.add_layer(popup);
+
 }
 
 //TODO get rid of this
