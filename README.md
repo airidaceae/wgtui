@@ -5,7 +5,7 @@ pronounced /wəgətui/
 
 ## TODO:
 - [X] display interfaces (including ones that are down)
-- [ ] bring interface down
+- [ ] take interface down
 - [ ] bring interface up
 - [ ] improve navigation
 - [ ] logging
