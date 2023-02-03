@@ -15,27 +15,17 @@
  *   along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use core::fmt;
+mod interface;
 
+use crate::interface::*;
 use cursive::{
     traits::Nameable,
     views::{Button, Dialog, DummyView, LinearLayout, SelectView, TextView},
-    Cursive, View,
+    Cursive,
 };
-use interface::WgInterface;
-
-use std::{
-    collections::BTreeMap,
-    fmt::{format, Debug, Error},
-    fs,
-    process::{exit, Child, Command},
-    time::{SystemTime, UNIX_EPOCH},
-};
-
 use parking_lot::RwLock;
+use std::process::Command;
 
-mod interface;
-use crate::interface::InterfacesMap;
 
 
 static INTERFACES: RwLock<InterfacesMap> = RwLock::new(InterfacesMap::new());
@@ -112,8 +102,7 @@ fn ret2main(s: &mut Cursive) {
 }
 
 fn swap_priv(s: &mut Cursive) {
-    INTERFACES.write().interfaces.values().map(|x| x = &WgInterface::default());
-
+    INTERFACES.write().interfaces.iter_mut().for_each(|(_, v)| v.show_priv = !v.show_priv);
     list_connections(s);
 }
 

@@ -4,7 +4,7 @@ use std::{
     fmt::{format, Debug, Error},
     fs,
     process::{exit, Child, Command},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH}, borrow::BorrowMut,
 };
 
 
@@ -121,11 +121,7 @@ pub struct WgInterface {
     pub peers: Vec<WgPeer>,
     pub show_priv: bool,
 }
-impl WgInterface {
-    pub fn toggle_privkey(&mut self){
-        self.show_priv = !self.show_priv;
-    }
-}
+
 impl Default for WgInterface {
     fn default() -> Self {
         WgInterface {
@@ -174,7 +170,7 @@ impl fmt::Display for WgInterface {
 }
 
 #[derive(Debug)]
-struct WgPeer {
+pub struct WgPeer {
     pub public_key: String,
     pub preshared_key: Option<String>,
     pub endpoint: String,
