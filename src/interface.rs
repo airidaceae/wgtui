@@ -1,17 +1,17 @@
 use core::fmt;
 use std::{
+    borrow::BorrowMut,
     collections::BTreeMap,
     fmt::{format, Debug, Error},
     fs,
     process::{exit, Child, Command},
-    time::{SystemTime, UNIX_EPOCH}, borrow::BorrowMut,
+    time::{SystemTime, UNIX_EPOCH},
 };
-
-
 
 pub struct InterfacesMap {
     pub interfaces: BTreeMap<String, WgInterface>,
     pub current_interface: String,
+    pub show_priv: bool,
 }
 
 impl InterfacesMap {
@@ -19,6 +19,7 @@ impl InterfacesMap {
         let interfacesmap: InterfacesMap = InterfacesMap {
             interfaces: BTreeMap::new(),
             current_interface: String::new(),
+            show_priv: false,
         };
         interfacesmap
     }
@@ -50,7 +51,7 @@ impl InterfacesMap {
                 interfaces.insert(
                     line[0].to_string(),
                     WgInterface {
-                        show_priv: false,
+                        show_priv: if self.show_priv { true } else { false },
                         enabled: true,
                         private_key: line[1].to_string(),
                         public_key: line[2].to_string(),
@@ -256,4 +257,3 @@ fn time_to_english(mut time: u64) -> Result<String, fmt::Error> {
     }
     Ok(output)
 }
-

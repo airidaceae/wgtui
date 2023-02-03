@@ -19,14 +19,12 @@ mod interface;
 
 use crate::interface::*;
 use cursive::{
+    Cursive,
     traits::Nameable,
     views::{Button, Dialog, DummyView, LinearLayout, SelectView, TextView},
-    Cursive,
 };
 use parking_lot::RwLock;
 use std::process::Command;
-
-
 
 static INTERFACES: RwLock<InterfacesMap> = RwLock::new(InterfacesMap::new());
 
@@ -102,7 +100,11 @@ fn ret2main(s: &mut Cursive) {
 }
 
 fn swap_priv(s: &mut Cursive) {
-    INTERFACES.write().interfaces.iter_mut().for_each(|(_, v)| v.show_priv = !v.show_priv);
+    s.pop_layer();
+    let inverted = !INTERFACES.read().show_priv;
+    INTERFACES.write().show_priv = inverted;
+    //leaving this commented here bc im proud of it
+    //INTERFACES.write().interfaces.iter_mut().for_each(|(_, v)| v.show_priv = !v.show_priv);
     list_connections(s);
 }
 
