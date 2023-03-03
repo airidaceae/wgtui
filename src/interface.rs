@@ -141,7 +141,7 @@ pub struct WgInterface {
     pub peers: Vec<WgPeer>,
     pub show_priv: bool,
 }
-    
+
 impl WgInterface {
     pub fn new(name: String) -> Self {
         WgInterface {
@@ -156,12 +156,12 @@ impl WgInterface {
         }
     }
 
-    pub fn toggle(&self) -> Output{
+    pub fn toggle(&self) -> Output {
         Command::new("wg-quick")
-             .arg(if self.enabled { "down" } else { "up" })
-             .arg(self.name.as_str())
-             .output()
-             .expect("Command failure")
+            .arg(if self.enabled { "down" } else { "up" })
+            .arg(self.name.as_str())
+            .output()
+            .expect("Command failure")
     }
 }
 

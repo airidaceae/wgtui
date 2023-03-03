@@ -19,9 +19,9 @@ mod interface;
 
 use crate::interface::*;
 use cursive::{
-    Cursive,
     traits::Nameable,
     views::{Button, Dialog, DummyView, LinearLayout, SelectView, TextView},
+    Cursive,
 };
 use parking_lot::RwLock;
 
