@@ -104,8 +104,9 @@ impl InterfacesMap {
             .map(|x| x.replace(".conf", ""))
             .filter(|x| !interfaces.contains_key(x))
             .collect::<Vec<String>>();
-        for item in interfaces_down {
-            interfaces.insert(item, Default::default());
+
+        for name in interfaces_down {
+            interfaces.insert(name.clone(), WgInterface::new(name));
         }
 
         self.interfaces = interfaces;
@@ -123,11 +124,11 @@ pub struct WgInterface {
     pub peers: Vec<WgPeer>,
     pub show_priv: bool,
 }
-
-impl Default for WgInterface {
-    fn default() -> Self {
+    
+impl WgInterface {
+    pub fn new(name: String) -> Self {
         WgInterface {
-            name: String::new(),
+            name,
             enabled: false,
             private_key: String::new(),
             public_key: String::new(),
@@ -137,9 +138,7 @@ impl Default for WgInterface {
             show_priv: false,
         }
     }
-}
 
-impl WgInterface {
     pub fn toggle(&self) -> Output{
         Command::new("wg-quick")
              .arg(if self.enabled { "down" } else { "up" })
