@@ -1,3 +1,20 @@
+/* wgtui - a terminal UI for wireguard
+ *   Copyright (C) 2023 Iris Pupo
+ *
+ *   This program is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU Affero General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU Affero General Public License for more details.
+ *
+ *   You should have received a copy of the GNU Affero General Public License
+ *   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 use core::fmt;
 use std::{
     collections::BTreeMap,
@@ -104,8 +121,9 @@ impl InterfacesMap {
             .map(|x| x.replace(".conf", ""))
             .filter(|x| !interfaces.contains_key(x))
             .collect::<Vec<String>>();
-        for item in interfaces_down {
-            interfaces.insert(item, Default::default());
+
+        for name in interfaces_down {
+            interfaces.insert(name.clone(), WgInterface::new(name));
         }
 
         self.interfaces = interfaces;
@@ -123,11 +141,11 @@ pub struct WgInterface {
     pub peers: Vec<WgPeer>,
     pub show_priv: bool,
 }
-
-impl Default for WgInterface {
-    fn default() -> Self {
+    
+impl WgInterface {
+    pub fn new(name: String) -> Self {
         WgInterface {
-            name: String::new(),
+            name,
             enabled: false,
             private_key: String::new(),
             public_key: String::new(),
@@ -137,9 +155,7 @@ impl Default for WgInterface {
             show_priv: false,
         }
     }
-}
 
-impl WgInterface {
     pub fn toggle(&self) -> Output{
         Command::new("wg-quick")
              .arg(if self.enabled { "down" } else { "up" })

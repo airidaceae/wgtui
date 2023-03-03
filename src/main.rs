@@ -24,7 +24,6 @@ use cursive::{
     views::{Button, Dialog, DummyView, LinearLayout, SelectView, TextView},
 };
 use parking_lot::RwLock;
-use std::{process::Command, result};
 
 static INTERFACES: RwLock<InterfacesMap> = RwLock::new(InterfacesMap::new());
 
@@ -40,8 +39,8 @@ fn main_menu(s: &mut Cursive) {
     s.add_global_callback('q', |s| s.quit());
     s.add_global_callback('q', |s| s.quit());
     let buttons = LinearLayout::vertical()
-        .child(Button::new("list", list_connections))
-        .child(Button::new("edit", Cursive::quit))
+        .child(Button::new("List", list_connections))
+        .child(Button::new("Configure", Cursive::quit))
         .child(Button::new("Activate", Cursive::quit))
         .child(DummyView)
         .child(Button::new("Quit", Cursive::quit));
