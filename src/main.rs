@@ -24,7 +24,7 @@ use cursive::{
     views::{Button, Dialog, DummyView, LinearLayout, SelectView, TextView},
 };
 use parking_lot::RwLock;
-use std::process::Command;
+use std::{process::Command, result};
 
 static INTERFACES: RwLock<InterfacesMap> = RwLock::new(InterfacesMap::new());
 
@@ -130,12 +130,7 @@ fn interface_select(s: &mut Cursive, name: &str) {
 
 fn change_state(s: &mut Cursive) {
     let name = &INTERFACES.read().current_interface;
-    let enabled = INTERFACES.read().interfaces.get(name).unwrap().enabled;
-    let result = Command::new("wg-quick")
-        .arg(if enabled { "down" } else { "up" })
-        .arg(name.as_str())
-        .output()
-        .expect("Command failure");
+    let result = INTERFACES.read().interfaces.get(name).unwrap().toggle();
 
     let popup = Dialog::text(String::from_utf8_lossy(&result.stderr))
         .button("OK", pop)

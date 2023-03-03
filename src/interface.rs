@@ -1,10 +1,9 @@
 use core::fmt;
 use std::{
-    borrow::BorrowMut,
     collections::BTreeMap,
     fmt::{format, Debug, Error},
     fs,
-    process::{exit, Child, Command},
+    process::{exit, Child, Command, Output},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -51,6 +50,7 @@ impl InterfacesMap {
                 interfaces.insert(
                     line[0].to_string(),
                     WgInterface {
+                        name: line[0].to_string(),
                         show_priv: if self.show_priv { true } else { false },
                         enabled: true,
                         private_key: line[1].to_string(),
@@ -114,6 +114,7 @@ impl InterfacesMap {
 
 #[derive(Debug)]
 pub struct WgInterface {
+    pub name: String,
     pub enabled: bool,
     pub private_key: String,
     pub public_key: String,
@@ -126,6 +127,7 @@ pub struct WgInterface {
 impl Default for WgInterface {
     fn default() -> Self {
         WgInterface {
+            name: String::new(),
             enabled: false,
             private_key: String::new(),
             public_key: String::new(),
@@ -134,6 +136,16 @@ impl Default for WgInterface {
             peers: Vec::new(),
             show_priv: false,
         }
+    }
+}
+
+impl WgInterface {
+    pub fn toggle(&self) -> Output{
+        Command::new("wg-quick")
+             .arg(if self.enabled { "down" } else { "up" })
+             .arg(self.name.as_str())
+             .output()
+             .expect("Command failure")
     }
 }
 
