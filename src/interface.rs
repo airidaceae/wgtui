@@ -167,11 +167,11 @@ impl WgInterface {
 
 impl fmt::Display for WgInterface {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        //guarentees that private key is only shown if the user has
-        //decided to let it
         if !self.enabled {
             write!(f, "Interface is down.")
         } else {
+            //guarentees that private key is only shown if the user has
+            //decided to let it
             let private_key = if self.show_priv {
                 self.private_key.to_owned()
             } else {
